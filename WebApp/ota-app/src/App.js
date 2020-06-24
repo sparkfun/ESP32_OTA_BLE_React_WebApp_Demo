@@ -18,7 +18,7 @@ var remaining;
 var amountToWrite;
 var currentPosition;
 
-var hardwareVersion = "N/A";
+var currentHardwareVersion = "N/A";
 var softwareVersion = "N/A";
 var latestSoftware = "N/A";
 
@@ -59,9 +59,14 @@ function CheckVersion(){
   {
     return;
   }
-
+  return esp32Service.getCharacteristic(versionCharacteristicUuid)
+  .then(characteristic => characteristic.readValue())
+  .then(value => {
+    currentHardwareVersion = 'v' + value.getUint8(0) + '.' + value.getUint8(1);
+    softwareVersion = 'v' + value.getUint8(2) + '.' + value.getUint8(3) + '.' + value.getUint8(4);
+  })
   //Grab our version numbers from Github
-  fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/version.json')
+  .then(_ => fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/version.json?token=AHAFCBQ5IDR5PW7K3TJO2I267TK2E'))
   .then(function (response) {
     // The API call was successful!
     return response.json();
@@ -70,28 +75,23 @@ function CheckVersion(){
     // JSON should be formatted so that 0'th entry is the newest version
     latestSoftware = data.firmware[0]['software'];
     console.log(latestSoftware);
-    
-  })
-  .catch(function (err) { console.warn('Something went wrong.', err); });
-
-  return esp32Service.getCharacteristic(versionCharacteristicUuid)
-  .then(characteristic => characteristic.readValue())
-  .then(value => {
-    /*for (var i = 0; i < 5; i++) { //TODO: change bounds from hardcode to actual Version space 
-      versionCharacteristicBuffer[i] = value.getUint8(i);
-    }*/
-    hardwareVersion = 'v' + value.getUint8(0) + '.' + value.getUint8(1);
-    softwareVersion = 'v' + value.getUint8(2) + '.' + value.getUint8(3) + '.' + value.getUint8(4);
-  })
-  .then(_ => {
-    document.getElementById('hw_version').innerHTML = "Hardware: " + hardwareVersion;
+    document.getElementById('hw_version').innerHTML = "Hardware: " + currentHardwareVersion;
     document.getElementById('sw_version').innerHTML = "Software: " + softwareVersion;
     if (latestSoftware === softwareVersion)
     {
-      //Do Nothing, maybe a pop up?
+      //Software is updated, do nothing.
     }
     else {
-      PromptUserForUpdate()
+      var compatibleHardwareVersion = "N/A"
+      var hardwareNumber = 0;
+      while (compatibleHardwareVersion !== undefined) {
+        compatibleHardwareVersion = data.firmware[0]['hardware'][hardwareNumber++];
+        if (compatibleHardwareVersion === currentHardwareVersion)
+        {
+          console.log(currentHardwareVersion);
+        }
+        PromptUserForUpdate()
+      }
     }
   })
   .catch(error => { console.log(error); });

@@ -20,6 +20,11 @@
 
 #include "esp_ota_ops.h"
 
+#define SOFTWARE_VERSION_MAJOR 0
+#define SOFTWARE_VERSION_MINOR 1
+#define SOFTWARE_VERSION_PATCH 0
+#define HARDWARE_VERSION_MAJOR 1
+#define HARDWARE_VERSION_MINOR 3
 
 class BLE; // forward declaration
 
@@ -59,8 +64,8 @@ class BLE
 
     BLEServer *pServer = NULL;
 
-    BLEService *pInfinitePyramidService = NULL;
-    BLECharacteristic * pInfinitePyramidIdCharacteristic = NULL;
+    BLEService *pESPOTAService = NULL;
+    BLECharacteristic * pESPOTAIdCharacteristic = NULL;
 
     BLEService *pService = NULL;
     BLECharacteristic * pVersionCharacteristic = NULL;

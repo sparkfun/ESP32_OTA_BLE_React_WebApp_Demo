@@ -20,7 +20,7 @@ var currentPosition;
 
 var currentHardwareVersion = "N/A";
 var softwareVersion = "N/A";
-var latestSoftware = "N/A";
+var latestCompatibleSoftware = "N/A";
 
 const characteristicSize = 512;
 
@@ -66,33 +66,40 @@ function CheckVersion(){
     softwareVersion = 'v' + value.getUint8(2) + '.' + value.getUint8(3) + '.' + value.getUint8(4);
   })
   //Grab our version numbers from Github
-  .then(_ => fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/version.json?token=AHAFCBQ5IDR5PW7K3TJO2I267TK2E'))
+  .then(_ => fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/version.json'))
   .then(function (response) {
     // The API call was successful!
     return response.json();
   })
   .then(function (data) {
     // JSON should be formatted so that 0'th entry is the newest version
-    latestSoftware = data.firmware[0]['software'];
-    console.log(latestSoftware);
     document.getElementById('hw_version').innerHTML = "Hardware: " + currentHardwareVersion;
     document.getElementById('sw_version').innerHTML = "Software: " + softwareVersion;
-    if (latestSoftware === softwareVersion)
+    if (latestCompatibleSoftware === softwareVersion)
     {
       //Software is updated, do nothing.
     }
     else {
-      var compatibleHardwareVersion = "N/A"
-      var hardwareNumber = 0;
-      while (compatibleHardwareVersion !== undefined) {
-        compatibleHardwareVersion = data.firmware[0]['hardware'][hardwareNumber++];
-        if (compatibleHardwareVersion === currentHardwareVersion)
-        {
-          console.log(currentHardwareVersion);
+      var softwareVersionCount = 0;
+      latestCompatibleSoftware = data.firmware[softwareVersionCount]['software'];
+      versionFindLoop:
+        while (latestCompatibleSoftware !== undefined) {
+          var compatibleHardwareVersion = "N/A"
+          var hardwareVersionCount = 0;
+          while (compatibleHardwareVersion !== undefined) {
+            compatibleHardwareVersion = data.firmware[softwareVersionCount]['hardware'][hardwareVersionCount++];
+            if (compatibleHardwareVersion === currentHardwareVersion)
+            {
+              latestCompatibleSoftware = data.firmware[softwareVersionCount]['software'];
+              console.log(latestCompatibleSoftware);
+              PromptUserForUpdate();
+              break versionFindLoop;
+            }
+          }
+          softwareVersionCount++;
         }
-        PromptUserForUpdate()
+        console.log("Uh oh, no compatible software found");
       }
-    }
   })
   .catch(error => { console.log(error); });
 }
@@ -107,19 +114,23 @@ function CheckVersion(){
  * 6-Use CSS to turn Popup into actual popup
  */
 function PromptUserForUpdate(){
-  fetch('https://raw.githubusercontent.com/AndyEngland521/Tet/master/Firmware/main/compiled/v1_3.bin')
-  .then(function (response) {
-    return response.arrayBuffer();
-  })
-  .then(function (data) {
     Popup.create({
-      content: "Version " + softwareVersion + " is out of date. Update to " + latestSoftware + "?",
+      content: "Version " + softwareVersion + " is out of date. Update to " + latestCompatibleSoftware + "?",
       buttons: {
           left: [{
               text: 'Yes',
               action: function () {
-                Popup.close();
-                return SendFileOverBluetooth(data);
+                fetch('https://raw.githubusercontent.com/AndyEngland521/Tet/master/Firmware/main/compiled/v1_3.bin')
+                .then(function (response) {
+                  return response.arrayBuffer();
+                })
+                .then(function (data) {
+                  Popup.close();
+                  
+                  updateData = data;
+                  return SendFileOverBluetooth();
+                })
+                .catch(function (err) { console.warn('Something went wrong.', err); });
               }
           }],
           right: [{
@@ -131,25 +142,22 @@ function PromptUserForUpdate(){
           }]
       }
   })
-  })
-  .catch(function (err) { console.warn('Something went wrong.', err); });
 }
 
 /* SendFileOverBluetooth(data)
  * Figures out how large our update binary is, attaches an eventListener to our dataCharacteristic so the Server can tell us when it has finished writing the data to memory
- * Calls sendBufferedData(), which begins a loop of write, wait for ready flag, write, wait for ready flag...
+ * Calls SendBufferedData(), which begins a loop of write, wait for ready flag, write, wait for ready flag...
  * TODO:
  * 8-Disconnect the eventListener once the update is complete
- * 7-Call sendBufferedData from promise returned by addEventListener or startNotifications (???Slight reliability improvement???)
+ * 7-Call SendBufferedData from promise returned by addEventListener or startNotifications (???Slight reliability improvement???)
  */
-function SendFileOverBluetooth(data) {
+function SendFileOverBluetooth() {
   if(!esp32Service)
   {
     console.log("No esp32 Service");
     return;
   }
 
-  updateData = data;
   totalSize = updateData.byteLength;
   remaining = totalSize;
   amountToWrite = 0;
@@ -160,20 +168,20 @@ function SendFileOverBluetooth(data) {
     readyFlagCharacteristic = characteristic;
     return characteristic.startNotifications()
     .then(_ => {
-      readyFlagCharacteristic.addEventListener('characteristicvaluechanged', sendBufferedData)
+      readyFlagCharacteristic.addEventListener('characteristicvaluechanged', SendBufferedData)
     });
   })
   .catch(error => { 
     console.log(error); 
   });
-  sendBufferedData();
+  SendBufferedData();
 }
 
 
 /* SendBufferedData()
  * An ISR attached to the same characteristic that it writes to, this function slices data into characteristic sized chunks and sends them to the Server
  */
-function sendBufferedData() {
+function SendBufferedData() {
   if (remaining > 0) {
     if (remaining >= characteristicSize) {
       amountToWrite = characteristicSize
@@ -186,7 +194,7 @@ function sendBufferedData() {
     remaining -= amountToWrite;
     console.log("remaining: " + remaining);
     esp32Service.getCharacteristic(fileCharacteristicUuid)
-      .then(characteristic => recursiveSend(characteristic, dataToSend))
+      .then(characteristic => RecursiveSend(characteristic, dataToSend))
       .catch(error => { 
         console.log(error); 
       });
@@ -197,10 +205,10 @@ function sendBufferedData() {
 /* resursiveSend()
  * Returns a promise to itself to ensure data was sent and the promise is resolved.
  */
-function recursiveSend(characteristic, data) {
+function RecursiveSend(characteristic, data) {
   return characteristic.writeValue(data)
   .catch(error => {
-    return recursiveSend(characteristic, data);
+    return RecursiveSend(characteristic, data);
   });
 }
 
@@ -219,11 +227,6 @@ return (
     onClick={BTConnect}
     >
       Connect to Bluetooth
-    </button>
-    <button id="Update Firmware"
-    onClick={CheckVersion}
-    >
-      CheckVersion
     </button>
   </header>
 </div>

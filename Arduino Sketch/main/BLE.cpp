@@ -5,19 +5,13 @@
 
 #include "BLE.h"
 
-#define SERVICE_UUID_INFINITEPYRAMID        "e804b643-6ce7-4e81-9f8a-ce0f699085eb"
-#define CHARACTERISTIC_UUID_IP_ID           "e804b644-6ce7-4e81-9f8a-ce0f699085eb"
+#define SERVICE_UUID_ESPOTA        "e804b643-6ce7-4e81-9f8a-ce0f699085eb"
+#define CHARACTERISTIC_UUID_ID           "e804b644-6ce7-4e81-9f8a-ce0f699085eb"
 
 #define SERVICE_UUID_OTA                    "b8659210-af91-4ad3-a995-a58d6fd26145" // UART service UUID
 #define CHARACTERISTIC_UUID_FW              "b8659211-af91-4ad3-a995-a58d6fd26145"
 #define CHARACTERISTIC_UUID_HW_VERSION      "b8659212-af91-4ad3-a995-a58d6fd26145"
 #define CHARACTERISTIC_UUID_READY           "b8659213-af91-4ad3-a995-a58d6fd26145"
-
-#define SOFTWARE_VERSION_MAJOR 0
-#define SOFTWARE_VERSION_MINOR 1
-#define SOFTWARE_VERSION_PATCH 0
-#define HARDWARE_VERSION_MAJOR 1
-#define HARDWARE_VERSION_MINOR 3
 
 #define FULL_PACKET 512
 #define CHARPOS_UPDATE_FLAG 5
@@ -86,12 +80,12 @@ bool BLE::begin(const char* localName = "UART Service") {
   pServer->setCallbacks(new BLECustomServerCallbacks());
 
   // Create the BLE Service
-  pInfinitePyramidService = pServer->createService(SERVICE_UUID_INFINITEPYRAMID);
+  pESPOTAService = pServer->createService(SERVICE_UUID_ESPOTA);
   pService = pServer->createService(SERVICE_UUID_OTA);
 
   // Create a BLE Characteristic
-  pInfinitePyramidIdCharacteristic = pInfinitePyramidService->createCharacteristic(
-                                       CHARACTERISTIC_UUID_IP_ID,
+  pESPOTAIdCharacteristic = pESPOTAService->createCharacteristic(
+                                       CHARACTERISTIC_UUID_ID,
                                        BLECharacteristic::PROPERTY_READ
                                      );
 
@@ -109,11 +103,11 @@ bool BLE::begin(const char* localName = "UART Service") {
   pOtaCharacteristic->setCallbacks(new otaCallback(this));
 
   // Start the service(s)
-  pInfinitePyramidService->start();
+  pESPOTAService->start();
   pService->start();
 
   // Start advertising
-  pServer->getAdvertising()->addServiceUUID(SERVICE_UUID_INFINITEPYRAMID);
+  pServer->getAdvertising()->addServiceUUID(SERVICE_UUID_ESPOTA);
   pServer->getAdvertising()->start();
 
   uint8_t hardwareVersion[5] = {HARDWARE_VERSION_MAJOR, HARDWARE_VERSION_MINOR, SOFTWARE_VERSION_MAJOR, SOFTWARE_VERSION_MINOR, SOFTWARE_VERSION_PATCH};

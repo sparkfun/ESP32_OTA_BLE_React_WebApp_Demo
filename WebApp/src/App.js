@@ -2,12 +2,13 @@ import React from 'react';
 import Popup from 'react-popup';
 import './App.css';
 
-var myESP32 = 'e804b643-6ce7-4e81-9f8a-ce0f699085eb'
+var myESP32 = 'd804b643-6ce7-4e81-9f8a-ce0f699085eb'
 
-var otaServiceUuid = 'b8659210-af91-4ad3-a995-a58d6fd26145'
-var versionCharacteristicUuid = 'b8659212-af91-4ad3-a995-a58d6fd26145'
-var fileCharacteristicUuid = 'b8659211-af91-4ad3-a995-a58d6fd26145'
+var otaServiceUuid = 'c8659210-af91-4ad3-a995-a58d6fd26145'
+var versionCharacteristicUuid = 'c8659212-af91-4ad3-a995-a58d6fd26145'
+var fileCharacteristicUuid = 'c8659211-af91-4ad3-a995-a58d6fd26145'
 
+let esp32Device = null;
 let esp32Service = null;
 let readyFlagCharacteristic = null;
 let dataToSend = null;
@@ -26,8 +27,6 @@ const characteristicSize = 512;
 
 /* BTConnect
  * Brings up the bluetooth connection window and filters for the esp32
- * TODO:
- * 10-Add handler for disconnect so page doesn't crash
  */
 function BTConnect(){
   navigator.bluetooth.requestDevice({
@@ -36,7 +35,11 @@ function BTConnect(){
     }],
     optionalServices: [otaServiceUuid]
   })
-  .then(device => device.gatt.connect())
+  .then(device => {
+    esp32Device = device;
+    esp32Device.addEventListener('gattserverdisconnected', onDisconnected);
+    return esp32Device.gatt.connect()
+  })
   .then(server => server.getPrimaryService(otaServiceUuid))
   .then(service => {
     esp32Service = service;
@@ -50,6 +53,29 @@ function BTConnect(){
   .catch(error => { console.log(error); });
 }
 
+/* onDisconnected(event)
+ * If the device becomes disconnected, prompt the user to reconnect.
+ */
+function onDisconnected(event) {
+  Popup.create({
+    content: esp32Device.name + ' is disconnected, would you like to reconnect?',
+    buttons: {
+      left: [{
+          text: 'Yes',
+          action: function () {
+            Popup.close();
+            BTConnect();
+          }
+      }],
+      right: [{
+          text: 'No',
+          action: function () {
+            Popup.close();
+          }
+      }]
+    }
+  })
+}
 
 /* CheckVersion()
  * Grab most current version from Github and Server, if they don't match, prompt the user for firmware update
@@ -66,7 +92,7 @@ function CheckVersion(){
     softwareVersion = 'v' + value.getUint8(2) + '.' + value.getUint8(3) + '.' + value.getUint8(4);
   })
   //Grab our version numbers from Github
-  .then(_ => fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/version.json'))
+  .then(_ => fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/GithubRepo/version.json'))
   .then(function (response) {
     // The API call was successful!
     return response.json();
@@ -83,35 +109,31 @@ function CheckVersion(){
       var softwareVersionCount = 0;
       latestCompatibleSoftware = data.firmware[softwareVersionCount]['software'];
       versionFindLoop:
-        while (latestCompatibleSoftware !== undefined) {
+        while (latestCompatibleSoftware !=='undefined') {
           var compatibleHardwareVersion = "N/A"
           var hardwareVersionCount = 0;
-          while (compatibleHardwareVersion !== undefined) {
+          while (compatibleHardwareVersion !== 'undefined') {
             compatibleHardwareVersion = data.firmware[softwareVersionCount]['hardware'][hardwareVersionCount++];
             if (compatibleHardwareVersion === currentHardwareVersion)
             {
               latestCompatibleSoftware = data.firmware[softwareVersionCount]['software'];
-              console.log(latestCompatibleSoftware);
-              PromptUserForUpdate();
+              if (latestCompatibleSoftware !== softwareVersion)
+              {
+                console.log(latestCompatibleSoftware);
+                PromptUserForUpdate();
+              }
               break versionFindLoop;
             }
           }
           softwareVersionCount++;
         }
-        console.log("Uh oh, no compatible software found");
       }
   })
   .catch(error => { console.log(error); });
 }
 
 /* PromptUserForUpdate()
- * Downloads the firmware based on the hardware version and latest software version
- * TODO:
- * 7-Make separate public repo for firmware and patchnotes
- * 5-Make github folder structure for different hardware versions
- * 6-Look at the specific release that matches software we want to switch to (Have html adapt to changing HW and SW versions)
- * 4-Get patchnotes from github release page(???) and display them with update prompt
- * 6-Use CSS to turn Popup into actual popup
+ * Asks the user if they want to update, if yes downloads the firmware based on the hardware version and latest software version and begins sending
  */
 function PromptUserForUpdate(){
     Popup.create({
@@ -120,7 +142,7 @@ function PromptUserForUpdate(){
           left: [{
               text: 'Yes',
               action: function () {
-                fetch('https://raw.githubusercontent.com/AndyEngland521/Tet/master/Firmware/main/compiled/v1_3.bin')
+                fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/' + latestCompatibleSoftware + '/GithubRepo/' + currentHardwareVersion + '.bin')
                 .then(function (response) {
                   return response.arrayBuffer();
                 })
@@ -136,7 +158,6 @@ function PromptUserForUpdate(){
           right: [{
               text: 'No',
               action: function () {
-                /** Close this popup. Close will always close the current visible one, if one is visible */
                 Popup.close();
               }
           }]
@@ -147,9 +168,6 @@ function PromptUserForUpdate(){
 /* SendFileOverBluetooth(data)
  * Figures out how large our update binary is, attaches an eventListener to our dataCharacteristic so the Server can tell us when it has finished writing the data to memory
  * Calls SendBufferedData(), which begins a loop of write, wait for ready flag, write, wait for ready flag...
- * TODO:
- * 8-Disconnect the eventListener once the update is complete
- * 7-Call SendBufferedData from promise returned by addEventListener or startNotifications (???Slight reliability improvement???)
  */
 function SendFileOverBluetooth() {
   if(!esp32Service)
@@ -162,7 +180,6 @@ function SendFileOverBluetooth() {
   remaining = totalSize;
   amountToWrite = 0;
   currentPosition = 0;
-
   esp32Service.getCharacteristic(fileCharacteristicUuid)
   .then(characteristic => {
     readyFlagCharacteristic = characteristic;
@@ -195,6 +212,15 @@ function SendBufferedData() {
     console.log("remaining: " + remaining);
     esp32Service.getCharacteristic(fileCharacteristicUuid)
       .then(characteristic => RecursiveSend(characteristic, dataToSend))
+      .then(_ => {
+        if (remaining === 0)
+        {
+          esp32Device.gatt.disconnect()
+        }
+      })
+      .then(_ => {
+        return document.getElementById('completion').innerHTML = (100 * (currentPosition/totalSize)).toPrecision(3) + '%';
+      })
       .catch(error => { 
         console.log(error); 
       });
@@ -223,6 +249,7 @@ return (
     <Popup />
     <p id="hw_version">Hardware: Not Connected</p>
     <p id="sw_version">Software: Not Connected</p>
+    <p id="completion"></p>
     <button id="connect"
     onClick={BTConnect}
     >

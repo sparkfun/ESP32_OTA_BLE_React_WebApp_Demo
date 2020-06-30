@@ -1,14 +1,9 @@
-/*
-  Copyright (c) 2019 Andy England
-  Header: BLE.h
-*/
-
 #include "BLE.h"
 
 #define SERVICE_UUID_ESPOTA        "d804b643-6ce7-4e81-9f8a-ce0f699085eb"
 #define CHARACTERISTIC_UUID_ID           "d804b644-6ce7-4e81-9f8a-ce0f699085eb"
 
-#define SERVICE_UUID_OTA                    "c8659210-af91-4ad3-a995-a58d6fd26145"
+#define SERVICE_UUID_OTA                    "c8659210-af91-4ad3-a995-a58d6fd26145" // UART service UUID
 #define CHARACTERISTIC_UUID_FW              "c8659211-af91-4ad3-a995-a58d6fd26145"
 #define CHARACTERISTIC_UUID_HW_VERSION      "c8659212-af91-4ad3-a995-a58d6fd26145"
 
@@ -40,6 +35,7 @@ void otaCallback::onWrite(BLECharacteristic *pCharacteristic)
         esp_ota_end(otaHandler);
         Serial.println("EndOTA");
         if (ESP_OK == esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL))) {
+          delay(2000);
           esp_restart();
         }
         else {
@@ -50,6 +46,7 @@ void otaCallback::onWrite(BLECharacteristic *pCharacteristic)
   }
 
   uint8_t txData[5] = {1, 2, 3, 4, 5};
+  //delay(1000);
   pCharacteristic->setValue((uint8_t*)txData, 5);
   pCharacteristic->notify();
 }

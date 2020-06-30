@@ -1,4 +1,12 @@
-import React from 'react';
+  
+/*************************************************** 
+ This is a React WebApp written to Flash an ESP32 via BLE
+ 
+ Written by Andrew England (SparkFun)
+ BSD license, all text above must be included in any redistribution.
+ *****************************************************/
+ 
+ import React from 'react';
 import Popup from 'react-popup';
 import './App.css';
 
@@ -36,9 +44,7 @@ function BTConnect(){
     optionalServices: [otaServiceUuid]
   })
   .then(device => {
-    esp32Device = device;
-    esp32Device.addEventListener('gattserverdisconnected', onDisconnected);
-    return esp32Device.gatt.connect()
+    return device.gatt.connect()
   })
   .then(server => server.getPrimaryService(otaServiceUuid))
   .then(service => {
@@ -90,6 +96,8 @@ function CheckVersion(){
   .then(value => {
     currentHardwareVersion = 'v' + value.getUint8(0) + '.' + value.getUint8(1);
     softwareVersion = 'v' + value.getUint8(2) + '.' + value.getUint8(3) + '.' + value.getUint8(4);
+    document.getElementById('hw_version').innerHTML = "Hardware: " + currentHardwareVersion;
+    document.getElementById('sw_version').innerHTML = "Software: " + softwareVersion;
   })
   //Grab our version numbers from Github
   .then(_ => fetch('https://raw.githubusercontent.com/sparkfun/ESP32_OTA_BLE_React_WebApp_Demo/master/GithubRepo/version.json'))
@@ -99,8 +107,6 @@ function CheckVersion(){
   })
   .then(function (data) {
     // JSON should be formatted so that 0'th entry is the newest version
-    document.getElementById('hw_version').innerHTML = "Hardware: " + currentHardwareVersion;
-    document.getElementById('sw_version').innerHTML = "Software: " + softwareVersion;
     if (latestCompatibleSoftware === softwareVersion)
     {
       //Software is updated, do nothing.
@@ -109,10 +115,10 @@ function CheckVersion(){
       var softwareVersionCount = 0;
       latestCompatibleSoftware = data.firmware[softwareVersionCount]['software'];
       versionFindLoop:
-        while (latestCompatibleSoftware !=='undefined') {
+        while (latestCompatibleSoftware !== undefined) {
           var compatibleHardwareVersion = "N/A"
           var hardwareVersionCount = 0;
-          while (compatibleHardwareVersion !== 'undefined') {
+          while (compatibleHardwareVersion !== undefined) {
             compatibleHardwareVersion = data.firmware[softwareVersionCount]['hardware'][hardwareVersionCount++];
             if (compatibleHardwareVersion === currentHardwareVersion)
             {
@@ -212,12 +218,6 @@ function SendBufferedData() {
     console.log("remaining: " + remaining);
     esp32Service.getCharacteristic(fileCharacteristicUuid)
       .then(characteristic => RecursiveSend(characteristic, dataToSend))
-      .then(_ => {
-        if (remaining === 0)
-        {
-          esp32Device.gatt.disconnect()
-        }
-      })
       .then(_ => {
         return document.getElementById('completion').innerHTML = (100 * (currentPosition/totalSize)).toPrecision(3) + '%';
       })

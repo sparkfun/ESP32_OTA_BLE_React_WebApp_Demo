@@ -1,13 +1,3 @@
-/*
-  Copyright (c) 2019 Andy England
-
-  A BLE driver for Over the Air Updates
-
-  Built on top of the BLE utilities by Neil Kolban
-  https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
-*/
-
-
 #ifndef _BLE_H_
 #define _BLE_H_
 

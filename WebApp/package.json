@@ -10,7 +10,7 @@
     "react-dom": "^16.13.1",
     "react-dropdown": "^1.7.0",
     "react-popup": "^0.10.0",
-    "react-scripts": "3.4.1"
+    "react-scripts": "5.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
